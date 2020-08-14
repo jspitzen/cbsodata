@@ -498,6 +498,78 @@ def get_data(table_id, dir=None, typed=False, select=None, filters=None,
     return data
 
 
+def get_streaming_data(table_id, dir=None, typed=False, select=None, filters=None,
+             catalog_url=None, **kwargs):
+    """Get the CBS data table as a lazy generator.
+
+    Parameters
+    ----------
+    table_id : str
+        The identifier of the table.
+    dir : str
+        Folder to save data to. If not given, data is not stored
+            on disk.
+    typed : bool
+        Return a typed data table. Default False.
+    select : list
+        Column label or list of column labels to return.
+    filters : str
+        Return only rows that agree on the filter.
+    catalog_url : str
+        The url of the catalog. Default "opendata.cbs.nl".
+    **kwargs :
+        Optional arguments that ``requests.get()`` takes. For example,
+        `proxies`, `cert` and `verify`.
+
+    Returns
+    -------
+    generator
+        The requested data.
+    """
+    _catalog_url = _get_catalog_url(catalog_url)
+    # http://opendata.cbs.nl/ODataApi/OData/37506wwm?$format=json
+    metadata_tables = _download_metadata(
+        table_id, "", catalog_url=_catalog_url, **kwargs
+    )
+
+    # The names of the tables with metadata
+    metadata_table_names = [table['name'] for table in metadata_tables]
+
+    # Download only the typed or untyped data
+    typed_or_not_str = "TypedDataSet" if typed else "UntypedDataSet"
+    metadata_table_names.remove(typed_or_not_str)
+
+    norm_cols = list(set(metadata.keys()) - set(exclude))
+
+    data = {}
+    for table_name in metadata_table_names:
+
+        # download table
+        if table_name in ["TypedDataSet", "UntypedDataSet"]:
+            continue
+            # metadata = _download_metadata(table_id, table_name,
+            #                               select=select, filters=filters,
+            #                               catalog_url=_catalog_url,
+            #                               **kwargs)
+        else:
+            metadata = _download_metadata(table_id, table_name,
+                                          catalog_url=_catalog_url,
+                                          **kwargs)
+        data[table_name] = metadata
+
+    import pdb
+    pdb.set_trace()
+    table_url = f'https://opendata.cbs.nl/ODataFeed/odata/{table_id}/TypedDataSet/?$format=json'
+    s = requests.Session()
+    # while table_url:
+    r = s.get(table_url).json()
+    yield from r['value']
+        # try:
+        #     table_url = r['odata.nextLink']
+        # except KeyError:
+        #     table_url = None
+
+
 @contextmanager
 def catalog(catalog_url, use_https=True):
     """Context manager for catalogs.
